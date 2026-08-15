@@ -160,10 +160,7 @@ def hotkey_listener():
     global hotkey_thread_id
     hotkey_thread_id = user32.GetCurrentThreadId()
 
-    # Ensure the thread has a Windows message queue before registering hotkeys.
-    # The message queue is created when the thread calls a user/GDI function
-    # such as PeekMessage or GetMessage. Calling PeekMessage with PM_NOREMOVE
-    # forces the queue to be created so RegisterHotKey will succeed.
+   
     try:
         msg = ctypes.wintypes.MSG()
         PM_NOREMOVE = 0x0000
@@ -332,14 +329,13 @@ def set_status(text, fg="black"):
 instructions = ttk.Label(
     root,
     text=(
-        "© 2026 Mendukusai. All Rights Reserved.\n"
-        "Close the window to hide to tray. Use the tray icon to restore, start/stop, or exit the app."
+        "© Mendukusai. All Rights Reserved.\n"
+        "Close the window to hide to tray. Use the tray icon to restore, start/stop, or exit the app :P"
     ),
     justify="center"
 )
 instructions.pack()
 
-# Keyboard shortcuts (use bind_all so keys work even if a child widget has focus)
 for key, callback in (
     ("z", start_motion),
     ("x", stop_motion),
@@ -349,11 +345,11 @@ for key, callback in (
     root.bind_all(f"<KeyPress-{key}>", callback)
     root.bind_all(f"<KeyPress-{key.upper()}>", callback)
 
-# Ensure window receives keyboard input
+
 root.focus_force()
 register_hotkeys()
 
-# Tray icon helpers
+
 
 def create_tray_image():
     if ICON_PATH.exists():
