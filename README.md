@@ -5,7 +5,7 @@ A lightweight Windows utility that combines an **autoclicker** with an **automat
 ## Features
 
 - **Autoclicker** - well obviously.
-- **Infinity motion** - moves the mouse cursor along a infinte path around its current position, with configurable width, height, and speed.
+- **Infinity motion** - moves the mouse cursor along a infinite path around its current position, with configurable width, height, and speed.
 - **Combined mode** - optionally trigger the autoclicker automatically whenever motion starts.
 - **System tray integration** - closing the main window sends the app to the tray instead of quitting.
 - **Self-click protection** - the autoclicker checks the cursor position before each synthetic click and skips clicking if the cursor is currently over Mouser's own panel(s), so it can't accidentally spam its own buttons.
