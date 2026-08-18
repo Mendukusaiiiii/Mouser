@@ -28,7 +28,7 @@ A lightweight Windows utility that combines an **autoclicker** with an **automat
 python main.py
 ```
 
-An optional custom tray/window icon can be placed next to the script as `tray_icon.png`; if it's missing, a simple built-in fallback icon is drawn instead.
+An optional custom tray or window icon can be placed next to the script as `icon.ico`; if it's missing, a simple built-in fallback icon is drawn instead.
 
 ## Usage
 
