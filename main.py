@@ -316,7 +316,7 @@ def hotkey_listener():
                 print("  -> That key combo is already registered by another application.")
                 failed.append(f"{key_name} (already in use)")
             elif err == 5:
-                print("  -> Access denied. The target window/app is likely running elevated; "
+                print("  -> Access denied. The target window or app is likely running elevated; "
                       "try running this script as Administrator too.")
                 failed.append(f"{key_name} (access denied)")
             else:
@@ -353,7 +353,19 @@ def register_hotkeys():
 # GUI
 root = tk.Tk()
 root.title("Mouser")
-root.geometry("650x420")
+
+WINDOW_WIDTH = 650
+WINDOW_HEIGHT = 420
+
+def center_window(win, width, height):
+    win.update_idletasks()
+    screen_width = win.winfo_screenwidth()
+    screen_height = win.winfo_screenheight()
+    x = (screen_width // 2) - (width // 2)
+    y = (screen_height // 2) - (height // 2)
+    win.geometry(f"{width}x{height}+{x}+{y}")
+
+center_window(root, WINDOW_WIDTH, WINDOW_HEIGHT)
 root.resizable(False, False)
 
 
@@ -378,7 +390,7 @@ set_window_icon()
 title = ttk.Label(
     root,
     text="Mouser",
-    font=("Arial", 14, "bold")
+    font=("Impact", 20,)
 )
 title.pack(pady=10)
 
@@ -532,10 +544,6 @@ def create_tray_image():
 
 
 def sync_root_visibility():
-    """Keeps the main window hidden whenever motion or the autoclicker's
-    mini mode is active, and brings it back once neither needs it — unless
-    the user explicitly tucked it into the tray, in which case we leave it
-    alone."""
     should_hide = running or mini_mode
     try:
         if should_hide:
@@ -571,10 +579,6 @@ def make_panel_button(parent, text, cmd, width=5):
 
 
 def make_draggable(win, widgets):
-    """Lets the user drag a frameless (overrideredirect) Toplevel by
-    click-dragging any of the given widgets. Each call gets its own
-    private offset state via closure, so multiple panels can each be
-    dragged independently without interfering with one another."""
     offset = {"x": 0, "y": 0}
 
     def start_drag(event):
