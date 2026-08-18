@@ -46,7 +46,6 @@ if ctypes.get_last_error() == ERROR_ALREADY_EXISTS:
         messagebox.showwarning(
             "Mouser is already running",
             "Another copy of Mouser is already running and is holding the "
-            "Z/X/C/V hotkeys.\n\nClose it first (check Task Manager for a "
             "leftover python.exe / Mouser.exe if it's not visible), then "
             "relaunch this app."
         )
@@ -136,7 +135,6 @@ mini_status_label = None
 # Motion mini panel
 motion_win = None
 motion_status_label = None
-
 
 user_hidden_to_tray = False
 
@@ -512,12 +510,8 @@ instructions = ttk.Label(
 )
 instructions.pack()
 
-
-
 root.focus_force()
 register_hotkeys()
-
-
 
 def create_tray_image():
     if ICON_PATH.exists():
@@ -555,8 +549,6 @@ def sync_root_visibility():
 
 
 def force_show_root():
-    """Explicit 'show me the window' request (tray Show, the mini panel's
-    restore button) — overrides a prior tray-hide, unlike sync_root_visibility."""
     global user_hidden_to_tray
     user_hidden_to_tray = False
     root.deiconify()
