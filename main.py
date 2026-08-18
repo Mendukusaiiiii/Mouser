@@ -44,14 +44,11 @@ if ctypes.get_last_error() == ERROR_ALREADY_EXISTS:
         _tmp_root = tk.Tk()
         _tmp_root.withdraw()
         messagebox.showwarning(
-            "Mouser is already running",
-            "Another copy of Mouser is already running and is holding the "
-            "leftover python.exe / Mouser.exe if it's not visible), then "
-            "relaunch this app."
+            "Mouser is already running."
         )
         _tmp_root.destroy()
     except Exception:
-        print("Mouser is already running — close the other instance first.")
+        print("Mouser is already running.")
     raise SystemExit(0)
 
 # Global hotkeys (scrapped)
@@ -65,10 +62,9 @@ MOD_NOREPEAT = 0x4000
 hotkey_thread = None
 hotkey_thread_id = None
 
-# Custom tray icon path
-ICON_PATH = Path(__file__).with_name("tray_icon.png")
+WINDOW_ICON_PATH = Path(__file__).with_name("icon.ico")
+TRAY_ICON_PATH = Path(__file__).with_name("tray_icon.png")
 
-# Mouse position structure
 class POINT(ctypes.Structure):
     _fields_ = [
         ("x", ctypes.c_long),
@@ -80,7 +76,6 @@ def get_mouse_position():
     user32.GetCursorPos(ctypes.byref(pt))
     return pt.x, pt.y
 
-
 def cursor_over_own_window():
 
     try:
@@ -90,7 +85,6 @@ def cursor_over_own_window():
 
         candidate_hwnds = []
 
-        
         if motion_win is not None:
             try:
                 if motion_win.winfo_exists():
@@ -136,6 +130,7 @@ mini_status_label = None
 motion_win = None
 motion_status_label = None
 
+
 user_hidden_to_tray = False
 
 def auto_clicker():
@@ -176,7 +171,6 @@ def auto_clicker():
         else:
             next_click = time.perf_counter()
 
-
 def start_clicker(event=None):
     global clicking, click_thread
 
@@ -189,8 +183,8 @@ def start_clicker(event=None):
     set_status("Status: Autoclicker Running", fg="green")
     update_mini_status("Clicking", "green")
 
-
-    enter_mini_mode()
+    if not running:
+        enter_mini_mode()
 
 
 def stop_clicker(event=None):
@@ -207,7 +201,7 @@ def stop_clicker(event=None):
 def infinity_motion():
     global running
 
-    # Use current cursor position as the center
+    # current cursor position as the center
     center_x, center_y = get_mouse_position()
 
     try:
@@ -221,14 +215,17 @@ def infinity_motion():
         return
 
     t = 0.0
-    last_set_pos = None  
+    last_set_pos = None
+    movement_deadzone = 8
 
     while running:
-    
+
         if last_set_pos is not None:
             current_pos = get_mouse_position()
-            if current_pos != last_set_pos:
-                root.after(0, lambda: stop_motion(auto_reason="cursor moved"))
+            dx = abs(current_pos[0] - last_set_pos[0])
+            dy = abs(current_pos[1] - last_set_pos[1])
+            if dx > movement_deadzone or dy > movement_deadzone:
+                root.after(0, lambda: stop_motion(auto_reason="Cursor moved"))
                 return
 
         # Infinity
@@ -301,8 +298,6 @@ def unregister_hotkeys():
 def hotkey_listener():
     global hotkey_thread_id
     hotkey_thread_id = user32.GetCurrentThreadId()
-
-    # Force creation of a message queue on this thread before registering hotkeys
     try:
         msg = ctypes.wintypes.MSG()
         PM_NOREMOVE = 0x0000
@@ -363,13 +358,20 @@ root.resizable(False, False)
 
 
 def set_window_icon():
-    if ICON_PATH.exists():
+    if WINDOW_ICON_PATH.exists():
         try:
-            icon_image = tk.PhotoImage(file=str(ICON_PATH))
+            root.iconbitmap(default=str(WINDOW_ICON_PATH))
+            root.wm_iconbitmap(str(WINDOW_ICON_PATH))
+        except Exception as e:
+            print(f"Warning: could not set native icon bitmap from {WINDOW_ICON_PATH}: {e}")
+
+    if WINDOW_ICON_PATH.exists():
+        try:
+            icon_image = tk.PhotoImage(file=str(WINDOW_ICON_PATH))
             root.iconphoto(False, icon_image)
             root._icon_image = icon_image
         except Exception as e:
-            print(f"Warning: could not set window icon from {ICON_PATH}: {e}")
+            print(f"Warning: could not set Tk photo icon from {WINDOW_ICON_PATH}: {e}")
 
 set_window_icon()
 
@@ -399,7 +401,7 @@ ctk = ttk.Checkbutton(
 )
 ctk.grid(row=0, column=0, columnspan=2, padx=5, pady=5, sticky="w")
 
-ttk.Label(left_frame, text="Interval (s, min 0.01):").grid(
+ttk.Label(left_frame, text="Interval:").grid(
     row=1, column=0, padx=5, pady=5, sticky="w"
 )
 
@@ -509,19 +511,18 @@ instructions = ttk.Label(
     justify="center"
 )
 instructions.pack()
-
 root.focus_force()
 register_hotkeys()
-
 def create_tray_image():
-    if ICON_PATH.exists():
-        try:
-            image = Image.open(ICON_PATH)
-            image = image.convert("RGBA")
-            image = image.resize((64, 64), Image.Resampling.LANCZOS if hasattr(Image, 'Resampling') else Image.ANTIALIAS)
-            return image
-        except Exception as e:
-            print(f"Warning: could not load tray icon {ICON_PATH}: {e}")
+    for candidate in (WINDOW_ICON_PATH, TRAY_ICON_PATH):
+        if candidate.exists():
+            try:
+                image = Image.open(candidate)
+                image = image.convert("RGBA")
+                image = image.resize((64, 64), Image.Resampling.LANCZOS if hasattr(Image, 'Resampling') else Image.ANTIALIAS)
+                return image
+            except Exception as e:
+                print(f"Warning: could not load hidden/tray icon {candidate}: {e}")
 
     image = Image.new("RGB", (64, 64), color=(0, 0, 0))
     draw = ImageDraw.Draw(image)
@@ -549,6 +550,8 @@ def sync_root_visibility():
 
 
 def force_show_root():
+    """Explicit 'show me the window' request (tray Show, the mini panel's
+    restore button) — overrides a prior tray-hide, unlike sync_root_visibility."""
     global user_hidden_to_tray
     user_hidden_to_tray = False
     root.deiconify()
