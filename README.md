@@ -33,10 +33,11 @@ An optional custom tray/window icon can be placed next to the script as `tray_ic
 ## Usage
 
 1. Launch the app - the main window opens with two panels: **Autoclicker** and **Motion**.
-2. **Autoclicker panel** - set the click interval (seconds, minimum ~0.001s) and press **Start**, or use the assigned global hotkey. Starting the clicker automatically opens the small mini-mode panel and hides the main window.
-3. **Motion panel** - set width, height, and speed, then press **Start** (or its hotkey). The cursor will trace a figure-eight centered on wherever it was when you started. Motion stops automatically if you manually move the mouse yourself.
+2. **Autoclicker panel** - set the click interval (seconds, minimum ~0.001s) and press **Start**. Starting the clicker automatically opens the small mini-mode panel and hides the main window.
+3. **Motion panel** - set width, height, and speed, then press **Start**. The cursor will trace a figure-eight centered on wherever it was when you started. Motion stops automatically if you manually move the mouse yourself.
 4. Check **"Autoclicker"** in the left panel before starting motion to have clicking start automatically alongside it.
-5. Closing the main window sends Mouser to the **system tray** rather than quitting - use the tray icon's **Show** to bring it back, or **Exit** to fully close the app.
+5. Closing the main window sends Mouser to the **system tray** rather than quitting, use the tray icon's **Show** to bring it back, or **Exit** to fully close the app.
+
 ## Disclaimer
 
 This tool automates mouse input. Automated clicking/movement may violate the terms of service of some applications or games, use responsibly and at your own risk.
