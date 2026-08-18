@@ -1,6 +1,6 @@
 # Mouser
 
-A lightweight Windows system-tray utility that combines an **autoclicker** with an **automated mouse motion** tool.
+A lightweight Windows utility that combines an **autoclicker** with an **automated mouse motion** tool.
 
 ## Features
 
