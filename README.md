@@ -39,6 +39,6 @@ An optional custom tray/window icon can be placed next to the script as `tray_ic
 5. Closing the main window sends Mouser to the **system tray** rather than quitting - use the tray icon's **Show** to bring it back, or **Exit** to fully close the app.
 ## Disclaimer
 
-This tool automates mouse input. Automated clicking/movement may violate the terms of service of some applications or games - use responsibly and at your own risk.
+This tool automates mouse input. Automated clicking/movement may violate the terms of service of some applications or games, use responsibly and at your own risk.
 
 © Mendukusai. All Rights Reserved.
