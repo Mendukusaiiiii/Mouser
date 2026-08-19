@@ -25,7 +25,7 @@ A lightweight Windows utility that combines an **autoclicker** with an **automat
 ## Running
 
 ```
-python main.py
+python Mouser.py
 ```
 
 An optional custom tray or window icon can be placed next to the script as `icon.ico`; if it's missing, a simple built-in fallback icon is drawn instead.
