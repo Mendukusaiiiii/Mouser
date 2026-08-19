@@ -1,0 +1,5 @@
+setup.py
+Mouser.egg-info/PKG-INFO
+Mouser.egg-info/SOURCES.txt
+Mouser.egg-info/dependency_links.txt
+Mouser.egg-info/top_level.txt
