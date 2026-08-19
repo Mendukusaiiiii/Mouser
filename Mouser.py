@@ -545,8 +545,6 @@ def sync_root_visibility():
 
 
 def force_show_root():
-    """Explicit 'show me the window' request (tray Show, the mini panel's
-    restore button) — overrides a prior tray-hide, unlike sync_root_visibility."""
     global user_hidden_to_tray
     user_hidden_to_tray = False
     root.deiconify()
