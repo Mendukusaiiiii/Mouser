@@ -32,6 +32,39 @@ user32.GetWindowRect.restype = ctypes.wintypes.BOOL
 user32.GetWindowRect.argtypes = [ctypes.wintypes.HWND, ctypes.POINTER(ctypes.wintypes.RECT)]
 
 kernel32 = ctypes.windll.kernel32
+
+ES_CONTINUOUS = 0x80000000
+ES_SYSTEM_REQUIRED = 0x00000001
+ES_DISPLAY_REQUIRED = 0x00000002
+
+kernel32.SetThreadExecutionState.restype = ctypes.wintypes.DWORD
+kernel32.SetThreadExecutionState.argtypes = [ctypes.wintypes.DWORD]
+
+_sleep_lock_count = 0
+_sleep_lock_lock = threading.Lock()
+
+
+def prevent_sleep(keep_display_on=False):
+    global _sleep_lock_count
+    with _sleep_lock_lock:
+        _sleep_lock_count += 1
+        flags = ES_CONTINUOUS | ES_SYSTEM_REQUIRED
+        if keep_display_on:
+            flags |= ES_DISPLAY_REQUIRED
+        kernel32.SetThreadExecutionState(flags)
+
+
+def allow_sleep(force=False):
+    global _sleep_lock_count
+    with _sleep_lock_lock:
+        if force:
+            _sleep_lock_count = 0
+        else:
+            _sleep_lock_count = max(0, _sleep_lock_count - 1)
+        if _sleep_lock_count == 0:
+            kernel32.SetThreadExecutionState(ES_CONTINUOUS)
+
+
 ERROR_ALREADY_EXISTS = 183
 _instance_mutex = kernel32.CreateMutexW(None, False, "Mouser_SingleInstance_Mutex")
 if ctypes.get_last_error() == ERROR_ALREADY_EXISTS:
@@ -175,6 +208,7 @@ def start_clicker(event=None):
         return
 
     clicking = True
+    prevent_sleep()
     click_thread = threading.Thread(target=auto_clicker, daemon=True)
     click_thread.start()
     set_status("Status: Autoclicker Running", fg="green")
@@ -187,10 +221,13 @@ def start_clicker(event=None):
 def stop_clicker(event=None):
     global clicking
 
+    was_clicking = clicking
     clicking = False
     set_status("Status: Autoclicker Stopped", fg="gray")
     update_mini_status("Idle", "gray")
 
+    if was_clicking:
+        allow_sleep()
 
     exit_mini_mode()
 
@@ -205,9 +242,9 @@ def infinity_motion():
         height = int(height_var.get())
         speed = float(speed_var.get())
     except ValueError:
-        set_status("Status: Invalid Input", fg="red")
-        update_motion_status("Bad input", "red")
-        running = False
+        root.after(0, lambda: set_status("Status: Invalid Input", fg="red"))
+        root.after(0, lambda: update_motion_status("Bad input", "red"))
+        root.after(0, stop_motion)
         return
 
     t = 0.0
@@ -242,6 +279,7 @@ def start_motion(event=None):
         return
 
     running = True
+    prevent_sleep(keep_display_on=True)
 
     movement_thread = threading.Thread(
         target=infinity_motion,
@@ -261,9 +299,13 @@ def start_motion(event=None):
 def stop_motion(event=None, *, auto_reason=None):
     global running
 
+    was_running = running
     running = False
     if clicking:
         stop_clicker()
+
+    if was_running:
+        allow_sleep()
 
     if auto_reason:
         set_status(f"Status: Stopped ({auto_reason})", fg="gray")
@@ -309,10 +351,10 @@ def hotkey_listener():
             key_name = chr(vk)
             print(f"Warning: could not register hotkey id {hotkey_id} (vk={vk}): WinError {err}")
             if err == 1409:
-                print("  -> That key combo is already registered by another application.")
+                print("That key combo is already registered by another application.")
                 failed.append(f"{key_name} (already in use)")
             elif err == 5:
-                print("  -> Access denied. The target window or app is likely running elevated; "
+                print("Access denied. The target window or app is likely running elevated; "
                       "try running this script as Administrator too.")
                 failed.append(f"{key_name} (access denied)")
             else:
@@ -521,7 +563,7 @@ def create_tray_image():
                 image = image.resize((64, 64), Image.Resampling.LANCZOS if hasattr(Image, 'Resampling') else Image.ANTIALIAS)
                 return image
             except Exception as e:
-                print(f"Warning: could not load hidden/tray icon {candidate}: {e}")
+                print(f"Warning: could not load hidden / tray icon {candidate}: {e}")
 
     image = Image.new("RGB", (64, 64), color=(0, 0, 0))
     draw = ImageDraw.Draw(image)
@@ -681,6 +723,7 @@ def quit_app(icon=None, item=None):
     global running, clicking
     running = False
     clicking = False
+    allow_sleep(force=True)
     if mini_win is not None:
         try:
             mini_win.destroy()
