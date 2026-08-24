@@ -10,7 +10,6 @@ A lightweight Windows utility that combines an **autoclicker** with an **automat
 - **System tray integration** - closing the main window sends the app to the tray instead of quitting.
 - **Self-click protection** - the autoclicker checks the cursor position before each synthetic click and skips clicking if the cursor is currently over Mouser's own panel(s), so it can't accidentally spam its own buttons.
 - **Motion self-stop** - if you manually grab and move the mouse while the motion is running, motion detects the interference and stops automatically instead of fighting you for control.
-- **Single-instance guard** - a named mutex prevents a second copy from running and silently stealing the global hotkeys; you'll get a warning dialog instead.
 
 ## Requirements
 
@@ -28,7 +27,6 @@ A lightweight Windows utility that combines an **autoclicker** with an **automat
 python Mouser.py
 ```
 
-An optional custom tray or window icon can be placed next to the script as `icon.ico`; if it's missing, a simple built-in fallback icon is drawn instead.
 
 ## Usage
 
