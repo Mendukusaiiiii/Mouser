@@ -92,7 +92,7 @@ hotkey_thread = None
 hotkey_thread_id = None
 
 APP_DIR = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
-WINDOW_ICON_PATH = APP_DIR / "icon.ico"
+WINDOW_ICON_PATH = APP_DIR / "Assets" / "Images" / "icon.ico"
 TRAY_ICON_PATH = Path(__file__).with_name("tray_icon.png")
 
 class POINT(ctypes.Structure):
