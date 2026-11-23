@@ -844,8 +844,11 @@ ttk.Spinbox(crosshair_frame, from_=1, to=400, textvariable=ch_size_var, width=8)
 ttk.Label(crosshair_frame, text="Thickness:").grid(row=1, column=2, padx=5, pady=4, sticky="w")
 ttk.Spinbox(crosshair_frame, from_=1, to=20, textvariable=ch_thickness_var, width=8).grid(row=1, column=3, padx=5, pady=4)
 
-ttk.Label(crosshair_frame, text="Gap:").grid(row=1, column=4, padx=5, pady=4, sticky="w")
-ttk.Spinbox(crosshair_frame, from_=0, to=200, textvariable=ch_gap_var, width=8).grid(row=1, column=5, padx=5, pady=4)
+ch_gap_label = ttk.Label(crosshair_frame, text="Gap:")
+ch_gap_label.grid(row=1, column=4, padx=5, pady=4, sticky="w")
+
+ch_gap_spin = ttk.Spinbox(crosshair_frame, from_=0, to=200, textvariable=ch_gap_var, width=8)
+ch_gap_spin.grid(row=1, column=5, padx=5, pady=4)
 
 ttk.Label(crosshair_frame, text="Offset X:").grid(row=2, column=0, padx=5, pady=4, sticky="w")
 ttk.Spinbox(crosshair_frame, from_=-2000, to=2000, textvariable=ch_offx_var, width=8).grid(row=2, column=1, padx=5, pady=4)
@@ -872,6 +875,22 @@ def update_color_state(*_):
 
 ch_invert_var.trace_add("write", update_color_state)
 update_color_state()
+
+GAP_STYLES = ("Cross", "Cross + Dot", "Sniper Scope")
+
+
+def update_gap_visibility(*_):
+
+    if ch_style_var.get() in GAP_STYLES:
+        ch_gap_label.grid()
+        ch_gap_spin.grid()
+    else:
+        ch_gap_label.grid_remove()
+        ch_gap_spin.grid_remove()
+
+
+ch_style_var.trace_add("write", update_gap_visibility)
+update_gap_visibility()
 
 
 status_label = tk.Label(
