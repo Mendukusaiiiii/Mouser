@@ -31,6 +31,27 @@ user32.WindowFromPoint.restype = ctypes.wintypes.HWND
 user32.GetWindowRect.restype = ctypes.wintypes.BOOL
 user32.GetWindowRect.argtypes = [ctypes.wintypes.HWND, ctypes.POINTER(ctypes.wintypes.RECT)]
 
+user32.GetParent.restype = ctypes.wintypes.HWND
+user32.GetParent.argtypes = [ctypes.wintypes.HWND]
+user32.GetWindowLongW.restype = ctypes.c_long
+user32.GetWindowLongW.argtypes = [ctypes.wintypes.HWND, ctypes.c_int]
+user32.SetWindowLongW.restype = ctypes.c_long
+user32.SetWindowLongW.argtypes = [ctypes.wintypes.HWND, ctypes.c_int, ctypes.c_long]
+
+gdi32 = ctypes.windll.gdi32
+user32.GetDC.restype = ctypes.c_void_p
+user32.GetDC.argtypes = [ctypes.wintypes.HWND]
+user32.ReleaseDC.restype = ctypes.c_int
+user32.ReleaseDC.argtypes = [ctypes.wintypes.HWND, ctypes.c_void_p]
+gdi32.GetPixel.restype = ctypes.wintypes.DWORD
+gdi32.GetPixel.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int]
+
+GWL_EXSTYLE = -20
+WS_EX_LAYERED = 0x00080000
+WS_EX_TRANSPARENT = 0x00000020  
+WS_EX_TOOLWINDOW = 0x00000080    
+WS_EX_NOACTIVATE = 0x08000000    
+
 kernel32 = ctypes.windll.kernel32
 
 ES_CONTINUOUS = 0x80000000
@@ -86,6 +107,7 @@ HOTKEY_IDS = {
     2: ord('X'),
     3: ord('C'),
     4: ord('V'),
+    5: ord('B'),  
 }
 MOD_NOREPEAT = 0x4000  
 hotkey_thread = None
@@ -145,20 +167,40 @@ def cursor_over_own_window():
     except Exception:
         return False
 
-# Global variables
+
 running = False
 movement_thread = None
 clicking = False
 click_thread = None
 
-# Mini mode state
+
 mini_mode = False
 mini_win = None
 mini_status_label = None
 
-# Motion mini panel
+
 motion_win = None
 motion_status_label = None
+
+
+crosshair_win = None
+crosshair_canvas = None
+crosshair_on = False
+invert_color = None  
+invert_rgb = None   
+INVERT_SMOOTHING = 0.18   
+INVERT_INTERVAL_MS = 33   
+CROSSHAIR_KEY = "#010101"  
+CROSSHAIR_STYLES = ("Cross", "Cross + Dot", "Dot", "Circle", "Sniper Scope")
+CROSSHAIR_COLORS = {
+    "Green": "#00ff00",
+    "Red": "#ff0000",
+    "Cyan": "#00ffff",
+    "Yellow": "#ffff00",
+    "White": "#ffffff",
+    "Magenta": "#ff00ff",
+    "Orange": "#ff8000",
+}
 
 
 user_hidden_to_tray = False
@@ -378,6 +420,8 @@ def hotkey_listener():
                 root.after(0, start_clicker)
             elif msg.wParam == 4:
                 root.after(0, stop_clicker)
+            elif msg.wParam == 5:
+                root.after(0, toggle_crosshair)
         user32.TranslateMessage(ctypes.byref(msg))
         user32.DispatchMessageW(ctypes.byref(msg))
     unregister_hotkeys()
@@ -388,12 +432,257 @@ def register_hotkeys():
     hotkey_thread = threading.Thread(target=hotkey_listener, daemon=True)
     hotkey_thread.start()
 
+# Crosshair overlay
+def make_click_through(win):
+    """Make a Tk window click-through, non-activating and hidden from Alt+Tab."""
+    win.update_idletasks()
+    wid = win.winfo_id()
+    hwnd = user32.GetParent(wid) or wid
+    style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+    style |= WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE
+    user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
+
+
+def _clamped_int(var, default, lo, hi):
+    try:
+        value = int(float(var.get()))
+    except (ValueError, tk.TclError):
+        value = default
+    return max(lo, min(hi, value))
+
+
+def resolve_crosshair_color():
+    if ch_invert_var.get() and invert_color:
+        color = invert_color
+    else:
+        name = ch_color_var.get().strip()
+        color = CROSSHAIR_COLORS.get(name, name)  
+        try:
+            root.winfo_rgb(color)
+        except tk.TclError:
+            color = CROSSHAIR_COLORS["Green"]
+    if color.lower() == CROSSHAIR_KEY:
+        color = "#020202"
+    return color
+
+
+def _crosshair_center_and_gap():
+    sw = root.winfo_screenwidth()
+    sh = root.winfo_screenheight()
+    size = _clamped_int(ch_size_var, 12, 1, 400)
+    thick = _clamped_int(ch_thickness_var, 2, 1, 20)
+    gap = _clamped_int(ch_gap_var, 4, 0, 200)
+    cx = sw // 2 + _clamped_int(ch_offx_var, 0, -2000, 2000)
+    cy = sh // 2 + _clamped_int(ch_offy_var, 0, -2000, 2000)
+    return sw, sh, cx, cy, gap + size + thick + 4
+
+
+def sample_background():
+  
+    sw, sh, cx, cy, d = _crosshair_center_and_gap()
+    hdc = user32.GetDC(None)
+    if not hdc:
+        return None
+    total = [0, 0, 0]
+    count = 0
+    try:
+        for dx, dy in ((-d, -d), (d, -d), (-d, d), (d, d)):
+            x, y = cx + dx, cy + dy
+            if not (0 <= x < sw and 0 <= y < sh):
+                continue
+            px = gdi32.GetPixel(hdc, x, y)
+            if px == 0xFFFFFFFF:  # CLR_INVALID
+                continue
+            total[0] += px & 0xFF
+            total[1] += (px >> 8) & 0xFF
+            total[2] += (px >> 16) & 0xFF
+            count += 1
+    finally:
+        user32.ReleaseDC(None, hdc)
+    if count == 0:
+        return None
+    return tuple(t // count for t in total)
+
+
+def inverse_rgb(rgb):
+    r, g, b = rgb
+    inv = (255 - r, 255 - g, 255 - b)
+
+    def lum(c):
+        return 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]
+
+
+    if abs(lum(inv) - lum(rgb)) < 90:
+        inv = (255, 255, 255) if lum(rgb) < 128 else (0, 0, 0)
+    return inv
+
+
+def _update_invert_color():
+    global invert_color, invert_rgb
+    if crosshair_win is None:
+        return
+    try:
+        if ch_invert_var.get():
+            bg = sample_background()
+            if bg:
+                target = inverse_rgb(bg)
+                if invert_rgb is None:
+                    invert_rgb = [float(v) for v in target] 
+                else:
+                   
+                    for i in range(3):
+                        invert_rgb[i] += (target[i] - invert_rgb[i]) * INVERT_SMOOTHING
+            new_color = None
+            if invert_rgb is not None:
+                new_color = "#%02x%02x%02x" % tuple(int(round(v)) for v in invert_rgb)
+        else:
+            invert_rgb = None
+            new_color = None
+        if new_color != invert_color:
+            invert_color = new_color
+            draw_crosshair()
+        root.after(INVERT_INTERVAL_MS, _update_invert_color)
+    except tk.TclError:
+        pass
+
+
+def _paint_crosshair(c, style, cx, cy, sw, sh, size, thick, gap, color, extra):
+  
+    w = thick + extra
+    r_dot = thick + 1 + extra / 2
+
+    def arm(x1, y1, x2, y2, width=w):
+        c.create_line(x1, y1, x2, y2, fill=color, width=width, capstyle="butt")
+
+    def dot(x, y, r):
+        c.create_oval(x - r, y - r, x + r, y + r, fill=color, outline=color)
+
+    if style in ("Cross", "Cross + Dot"):
+        arm(cx - gap - size, cy, cx - gap, cy)
+        arm(cx + gap, cy, cx + gap + size, cy)
+        arm(cx, cy - gap - size, cx, cy - gap)
+        arm(cx, cy + gap, cx, cy + gap + size)
+        if style == "Cross + Dot":
+            dot(cx, cy, r_dot)
+
+    elif style == "Dot":
+        dot(cx, cy, max(2, size // 6) + extra / 2)
+
+    elif style == "Circle":
+        c.create_oval(cx - size, cy - size, cx + size, cy + size, outline=color, width=w)
+        dot(cx, cy, r_dot)
+
+    elif style == "Sniper Scope":
+    
+        arm(0, cy, cx - gap, cy)
+        arm(cx + gap, cy, sw, cy)
+        arm(cx, 0, cx, cy - gap)
+        arm(cx, cy + gap, cx, sh)
+        spacing = max(12, size * 3)
+        for i in range(1, 6):
+            for px, py in ((cx - i * spacing, cy), (cx + i * spacing, cy),
+                           (cx, cy - i * spacing), (cx, cy + i * spacing)):
+                if 0 <= px <= sw and 0 <= py <= sh:
+                    dot(px, py, r_dot)
+        dot(cx, cy, r_dot)
+
+
+def draw_crosshair(*_):
+    if crosshair_canvas is None:
+        return
+    try:
+        c = crosshair_canvas
+        c.delete("all")
+
+        sw, sh, cx, cy, _ = _crosshair_center_and_gap()
+        size = _clamped_int(ch_size_var, 12, 1, 400)
+        thick = _clamped_int(ch_thickness_var, 2, 1, 20)
+        gap = _clamped_int(ch_gap_var, 4, 0, 200)
+        style = ch_style_var.get()
+        if style not in CROSSHAIR_STYLES:
+            style = "Cross + Dot"
+        color = resolve_crosshair_color()
+
+        if ch_outline_var.get():
+            _paint_crosshair(c, style, cx, cy, sw, sh, size, thick, gap, "#000000", 2)
+        _paint_crosshair(c, style, cx, cy, sw, sh, size, thick, gap, color, 0)
+    except tk.TclError:
+        pass
+
+
+def _keep_crosshair_on_top():
+    if crosshair_win is None:
+        return
+    try:
+        crosshair_win.attributes("-topmost", True)
+        crosshair_win.lift()
+        root.after(1000, _keep_crosshair_on_top)
+    except tk.TclError:
+        pass
+
+
+def show_crosshair():
+    global crosshair_win, crosshair_canvas, crosshair_on
+
+    if crosshair_win is not None:
+        return
+
+    sw = root.winfo_screenwidth()
+    sh = root.winfo_screenheight()
+
+    win = tk.Toplevel(root)
+    win.overrideredirect(True)
+    win.attributes("-topmost", True)
+    win.configure(bg=CROSSHAIR_KEY)
+    win.geometry(f"{sw}x{sh}+0+0")
+    win.attributes("-transparentcolor", CROSSHAIR_KEY)
+
+    canvas = tk.Canvas(win, bg=CROSSHAIR_KEY, highlightthickness=0, bd=0)
+    canvas.pack(fill="both", expand=True)
+
+    crosshair_win = win
+    crosshair_canvas = canvas
+    crosshair_on = True
+
+    make_click_through(win)
+    draw_crosshair()
+    root.after(1000, _keep_crosshair_on_top)
+    root.after(INVERT_INTERVAL_MS, _update_invert_color)
+
+    ch_button_text.set("Hide Crosshair")
+    set_status("Status: Crosshair On", fg="green")
+
+
+def hide_crosshair():
+    global crosshair_win, crosshair_canvas, crosshair_on, invert_color, invert_rgb
+
+    if crosshair_win is not None:
+        try:
+            crosshair_win.destroy()
+        except tk.TclError:
+            pass
+    crosshair_win = None
+    crosshair_canvas = None
+    crosshair_on = False
+    invert_color = None
+    invert_rgb = None
+
+    ch_button_text.set("Show Crosshair")
+    set_status("Status: Crosshair Off", fg="gray")
+
+
+def toggle_crosshair(event=None):
+    if crosshair_on:
+        hide_crosshair()
+    else:
+        show_crosshair()
+
 # GUI
 root = tk.Tk()
 root.title("Mouser")
 
 WINDOW_WIDTH = 650
-WINDOW_HEIGHT = 420
+WINDOW_HEIGHT = 580
 
 def center_window(win, width, height):
     win.update_idletasks()
@@ -513,7 +802,78 @@ ttk.Button(
     takefocus=False
 ).grid(row=3, column=0, columnspan=2, padx=5, pady=10, sticky="ew")
 
-# Status
+
+ch_style_var = tk.StringVar(value="Cross + Dot")
+ch_color_var = tk.StringVar(value="Green")
+ch_size_var = tk.StringVar(value="12")
+ch_thickness_var = tk.StringVar(value="2")
+ch_gap_var = tk.StringVar(value="4")
+ch_offx_var = tk.StringVar(value="0")
+ch_offy_var = tk.StringVar(value="0")
+ch_outline_var = tk.BooleanVar(value=True)
+ch_invert_var = tk.BooleanVar(value=False)
+ch_button_text = tk.StringVar(value="Show Crosshair")
+
+crosshair_frame = ttk.LabelFrame(root, text="Crosshair Overlay (hotkey: B)", padding=10)
+crosshair_frame.pack(padx=20, pady=(0, 5), fill="x")
+
+ttk.Label(crosshair_frame, text="Style:").grid(row=0, column=0, padx=5, pady=4, sticky="w")
+ttk.Combobox(
+    crosshair_frame, textvariable=ch_style_var, values=CROSSHAIR_STYLES,
+    state="readonly", width=12
+).grid(row=0, column=1, padx=5, pady=4)
+
+ttk.Label(crosshair_frame, text="Color:").grid(row=0, column=2, padx=5, pady=4, sticky="w")
+ch_color_combo = ttk.Combobox(
+    crosshair_frame, textvariable=ch_color_var, values=list(CROSSHAIR_COLORS),
+    width=12
+)
+ch_color_combo.grid(row=0, column=3, padx=5, pady=4)
+
+ttk.Checkbutton(
+    crosshair_frame, text="Outline", variable=ch_outline_var
+).grid(row=0, column=4, padx=5, pady=4, sticky="w")
+
+ttk.Checkbutton(
+    crosshair_frame, text="Invert", variable=ch_invert_var
+).grid(row=0, column=5, padx=5, pady=4, sticky="w")
+
+ttk.Label(crosshair_frame, text="Size:").grid(row=1, column=0, padx=5, pady=4, sticky="w")
+ttk.Spinbox(crosshair_frame, from_=1, to=400, textvariable=ch_size_var, width=8).grid(row=1, column=1, padx=5, pady=4)
+
+ttk.Label(crosshair_frame, text="Thickness:").grid(row=1, column=2, padx=5, pady=4, sticky="w")
+ttk.Spinbox(crosshair_frame, from_=1, to=20, textvariable=ch_thickness_var, width=8).grid(row=1, column=3, padx=5, pady=4)
+
+ttk.Label(crosshair_frame, text="Gap:").grid(row=1, column=4, padx=5, pady=4, sticky="w")
+ttk.Spinbox(crosshair_frame, from_=0, to=200, textvariable=ch_gap_var, width=8).grid(row=1, column=5, padx=5, pady=4)
+
+ttk.Label(crosshair_frame, text="Offset X:").grid(row=2, column=0, padx=5, pady=4, sticky="w")
+ttk.Spinbox(crosshair_frame, from_=-2000, to=2000, textvariable=ch_offx_var, width=8).grid(row=2, column=1, padx=5, pady=4)
+
+ttk.Label(crosshair_frame, text="Offset Y:").grid(row=2, column=2, padx=5, pady=4, sticky="w")
+ttk.Spinbox(crosshair_frame, from_=-2000, to=2000, textvariable=ch_offy_var, width=8).grid(row=2, column=3, padx=5, pady=4)
+
+ttk.Button(
+    crosshair_frame,
+    textvariable=ch_button_text,
+    command=toggle_crosshair,
+    takefocus=False
+).grid(row=2, column=4, columnspan=2, padx=5, pady=4, sticky="ew")
+
+for _v in (ch_style_var, ch_color_var, ch_size_var, ch_thickness_var,
+           ch_gap_var, ch_offx_var, ch_offy_var, ch_outline_var, ch_invert_var):
+    _v.trace_add("write", draw_crosshair)
+
+
+def update_color_state(*_):
+   
+    ch_color_combo.config(state="disabled" if ch_invert_var.get() else "normal")
+
+
+ch_invert_var.trace_add("write", update_color_state)
+update_color_state()
+
+
 status_label = tk.Label(
     root,
     text="Status: Stopped",
@@ -542,7 +902,7 @@ def update_motion_status(text, fg):
         except tk.TclError:
             pass
 
-# Instructions
+
 instructions = ttk.Label(
     root,
     text=(
@@ -734,6 +1094,11 @@ def quit_app(icon=None, item=None):
             motion_win.destroy()
         except Exception:
             pass
+    if crosshair_win is not None:
+        try:
+            crosshair_win.destroy()
+        except Exception:
+            pass
     try:
         icon.stop()
     except Exception:
@@ -750,6 +1115,7 @@ def quit_app(icon=None, item=None):
 def setup_tray():
     menu = pystray.Menu(
         pystray.MenuItem("Show", show_window),
+        pystray.MenuItem("Toggle Crosshair", lambda icon, item: root.after(0, toggle_crosshair)),
         pystray.MenuItem("Exit", quit_app)
     )
     icon = pystray.Icon("Mouser", create_tray_image(), "Mouser", menu)
