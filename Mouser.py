@@ -814,7 +814,7 @@ ch_outline_var = tk.BooleanVar(value=True)
 ch_invert_var = tk.BooleanVar(value=False)
 ch_button_text = tk.StringVar(value="Show Crosshair")
 
-crosshair_frame = ttk.LabelFrame(root, text="Crosshair Overlay (hotkey: B)", padding=10)
+crosshair_frame = ttk.LabelFrame(root, text="Crosshair Overlay", padding=10)
 crosshair_frame.pack(padx=20, pady=(0, 5), fill="x")
 
 ttk.Label(crosshair_frame, text="Style:").grid(row=0, column=0, padx=5, pady=4, sticky="w")
